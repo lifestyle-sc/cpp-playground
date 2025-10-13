@@ -3,3 +3,10 @@ build/
 
 # vscode
 .vscode/
+
+# clangd
+.cache/
+
+# etc files
+data
+output.txt
