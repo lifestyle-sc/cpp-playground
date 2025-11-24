@@ -31,7 +31,7 @@ include(GoogleTest)
 
 foreach(TEST_SRC ${TEST_SOURCES})
     get_filename_component(FILE_NAME ${TEST_SRC} NAME)
-    string(REGEX REPLACE "\\.cpp$" "" TEST_NAME ${FILE_NAME}) # e.g., math.t.cpp -> math.t 
+    string(REGEX REPLACE "\\.cpp$" "" TEST_NAME ${FILE_NAME}) # e.g., math.t.cpp -> math.t
     add_executable(${TEST_NAME} ${TEST_SRC})
     target_link_libraries(${TEST_NAME} PRIVATE playgroundlib gtest_main)
     gtest_discover_tests(${TEST_NAME})
