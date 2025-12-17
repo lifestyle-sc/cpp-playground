@@ -4,6 +4,7 @@ set -e
 # === Default settings ===
 BUILD_TYPE="Debug"
 ACTIONS=("build")
+CMAKE_ARGS=()
 
 # === Parse args ====
 while [[ $# -gt 0 ]]; do
@@ -18,6 +19,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --action=*)
             IFS=',' read -r -a ACTIONS <<< "${1#--action=}"
+            shift
+            ;;
+        -D*)
+            CMAKE_ARGS+=("$1")
             shift
             ;;
         *)
@@ -38,7 +43,7 @@ for ACTION in "${ACTIONS[@]}"; do
             echo "🛠️ Building in $BUILD_TYPE mode..."
             mkdir -p "$BUILD_DIR"
             cd "$BUILD_DIR"
-            cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" ../..
+            cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" "${CMAKE_ARGS[@]}" ../..
             cmake --build .
             cd - > /dev/null
             echo "✅ Build completed"

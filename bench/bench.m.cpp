@@ -1,0 +1,31 @@
+#include <benchmark/benchmark.h>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+
+bool compareInt(const char *s1, const char *s2) {
+    char c1, c2;
+    for (int i1 = 0, i2 = 0;; ++i1, ++i2) {
+        c1 = s1[i1];
+        c2 = s2[i2];
+        if (c1 != c2) {
+            return c1 > c2;
+        }
+    }
+}
+
+void BM_loop_int(benchmark::State &state) {
+    const uint32_t N = state.range(0);
+    std::unique_ptr<char[]> s(new char[2 * N]);
+    ::memset(s.get(), 'a', 2 * N * sizeof(char));
+    s[2 * N - 1] = 0;
+    const char *s1 = s.get();
+    const char *s2 = s.get() + N;
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(compareInt(s1, s2));
+    }
+    state.SetItemsProcessed(N * state.iterations());
+}
+
+BENCHMARK(BM_loop_int)->Arg(1 << 20);
+BENCHMARK_MAIN();
