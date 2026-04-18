@@ -1,11 +1,13 @@
 #include <benchmark/benchmark.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
 
 #include <emmintrin.h>
 #include <immintrin.h>
@@ -24,6 +26,9 @@
 #define REPEAT(x) REPEAT32(x)
 
 #define ARGS ->RangeMultiplier(2)->Range(1 << 10, 1 << 30)
+#define THREADS_RANGE_ARGS ->RangeMultiplier(2)->Range(1 << 10, 1 << 30)->ThreadRange(1, 2)
+#define THREADS_ARGS                                                                               \
+    ->RangeMultiplier(2)->Range(1 << 10, 1 << 30)->Threads(1)->Threads(2)->Threads(3)->Threads(4)
 
 //      *************************
 //      CPU Processing Measurement
@@ -836,6 +841,88 @@ template <class Word> void BM_write_list(benchmark::State &state) {
     }
 }
 
+//      ***************************************
+//      High performance Concurrent Measurement
+//      ***************************************
+
+template <class Word> void BM_read_seq_conc(benchmark::State &state) {
+    const size_t size = state.range(0);
+    void *memory = ::malloc(size);
+    void *const end = static_cast<char *>(memory) + size;
+    volatile Word *const p0 = static_cast<Word *>(memory);
+    Word *const p1 = static_cast<Word *>(end);
+
+    for (auto _ : state) {
+        for (volatile Word *p = p0; p != p1;) {
+            REPEAT(benchmark::DoNotOptimize(*p++);)
+        }
+        benchmark::ClobberMemory();
+    }
+
+    state.SetBytesProcessed(size * state.iterations());
+    state.SetItemsProcessed((p1 - p0) * state.iterations());
+    ::free(memory);
+}
+
+template <class Word> void BM_write_conc(benchmark::State &state) {
+    const size_t size = state.range(0);
+    void *memory = ::malloc(size);
+    void *const end = static_cast<char *>(memory) + size;
+    volatile Word *const p0 = static_cast<Word *>(memory);
+    Word *const p1 = static_cast<Word *>(end);
+    Word fill = {};
+
+    for (auto _ : state) {
+        for (volatile Word *p = p0; p != p1;) {
+            REPEAT(*(p) = fill; benchmark::DoNotOptimize(p++);)
+        }
+        benchmark::ClobberMemory();
+    }
+
+    state.SetBytesProcessed(size * state.iterations());
+    state.SetItemsProcessed((p1 - p0) * state.iterations());
+    ::free(memory);
+}
+
+std::atomic<unsigned long> counter1{0};
+void BM_shared_increment_atomic(benchmark::State &state) {
+    for (auto _ : state) {
+        REPEAT(benchmark::DoNotOptimize(++counter1);)
+    }
+
+    state.SetItemsProcessed(state.iterations() * 32);
+}
+
+unsigned long counter2{0};
+std::mutex counter2_mutex;
+void BM_shared_increment_mutex(benchmark::State &state) {
+    for (auto _ : state) {
+        REPEAT({
+            std::lock_guard<std::mutex> lock(counter2_mutex);
+            benchmark::DoNotOptimize(++counter2);
+        })
+    }
+
+    state.SetItemsProcessed(state.iterations() * 32);
+}
+
+std::atomic<unsigned long> a[1024];
+void BM_false_shared(benchmark::State &state) {
+    std::atomic<unsigned long> &x = a[state.thread_index()];
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(++x);
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+
+void BM_not_shared(benchmark::State &state) {
+    std::atomic<unsigned long> x{0};
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(++x);
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+
 // CPU
 
 // BENCHMARK(BM_loop_int)->Arg(1 << 20);
@@ -873,7 +960,7 @@ template <class Word> void BM_write_list(benchmark::State &state) {
 // BENCHMARK_TEMPLATE1(BM_write_seq, __m256i) ARGS;
 // BENCHMARK_TEMPLATE1(BM_write_seq_backward, __m256i) ARGS;
 // BENCHMARK_TEMPLATE1(BM_write_vec, unsigned long)->Arg(1 << 20);
-BENCHMARK_TEMPLATE1(BM_write_list, unsigned long)->Arg(1 << 20);
+// BENCHMARK_TEMPLATE1(BM_write_list, unsigned long)->Arg(1 << 20);
 
 // BENCHMARK_TEMPLATE1(BM_read_random, unsigned int) ARGS;
 // BENCHMARK_TEMPLATE1(BM_read_random, unsigned long) ARGS;
@@ -883,5 +970,14 @@ BENCHMARK_TEMPLATE1(BM_write_list, unsigned long)->Arg(1 << 20);
 // BENCHMARK_TEMPLATE1(BM_write_random, unsigned long) ARGS;
 // BENCHMARK_TEMPLATE1(BM_write_random, __m128i) ARGS;
 // BENCHMARK_TEMPLATE1(BM_write_random, __m256i) ARGS;
+
+// High Performance Concurrent Memory Access
+// BENCHMARK_TEMPLATE1(BM_read_seq_conc, unsigned long) THREADS_ARGS;
+// BENCHMARK_TEMPLATE1(BM_read_seq_conc, unsigned long) THREADS_RANGE_ARGS;
+// BENCHMARK_TEMPLATE1(BM_write_conc, unsigned long) THREADS_RANGE_ARGS;
+// BENCHMARK(BM_shared_increment_atomic)->Arg(1 << 20)->Threads(2);
+// BENCHMARK(BM_shared_increment_mutex)->Arg(1 << 20)->Threads(2);
+BENCHMARK(BM_false_shared)->Arg(1 << 20)->Threads(2);
+BENCHMARK(BM_not_shared)->Arg(1 << 20)->Threads(2);
 
 BENCHMARK_MAIN();
