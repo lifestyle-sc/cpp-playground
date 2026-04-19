@@ -30,9 +30,11 @@ function(apply_sanitizers tgt)
       endif()
     endforeach()
     if(_flags)
+      # Join list back to comma-separated string for the compiler flag
+      string(JOIN "," _flags_str ${_flags})
       # add compile+link sanitizer flags
-      target_compile_options(${tgt} PRIVATE -fsanitize=${_flags})
-      target_link_options(${tgt} PRIVATE -fsanitize=${_flags})
+      target_compile_options(${tgt} PRIVATE -fsanitize=${_flags_str})
+      target_link_options(${tgt} PRIVATE -fsanitize=${_flags_str})
       # helpful for nicer stacks
       target_compile_options(${tgt} PRIVATE -fno-omit-frame-pointer)
     endif()
@@ -53,6 +55,30 @@ function(apply_profiler tgt)
   endif()
 endfunction()
 
+# Create a "warnings" target that doesn't build code itself,
+# but holds all our strict settings.
+add_library(project_strict_warnings INTERFACE)
+
+target_compile_options(project_strict_warnings INTERFACE
+    # Settings for GCC and Clang
+    $<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:GNU>>:
+        -Wall                   # Basic common warnings
+        -Wextra                  # Additional common warnings
+        -Wshadow                # Warn when a variable "shadows" another (see below)
+        -Wuninitialized         # Warn about using variables before they are set
+        -Wpedantic              # Ensure you aren't using non-standard compiler "extensions"
+        -Wconversion            # Warn if data is lost during type conversion (e.g., double to int)
+        -Wreturn-type           # The one that caught your previous error!
+        -Werror                 # Turn all the above into errors
+    >
+    # Settings for Visual Studio (MSVC)
+    $<$<CXX_COMPILER_ID:MSVC>:
+        /W4                     # Set warning level 4 (highest standard level)
+        /WX                     # Warnings as errors
+        /permissive-            # Enforce standard C++ behavior (turns off MSVC "cheats")
+    >
+)
+
 # === Exclude main and test files using regex
 file(GLOB SRC_FILES CONFIGURE_DEPENDS "*.cpp")
 list(FILTER SRC_FILES EXCLUDE REGEX ".*\\.m\\.cpp$")
@@ -66,7 +92,7 @@ target_include_directories(playgroundlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 add_executable(playground.tsk
 playground.m.cpp
 )
-target_link_libraries(playground.tsk PRIVATE playgroundlib)
+target_link_libraries(playground.tsk PRIVATE playgroundlib project_strict_warnings)
 
 # ===  Apply knobs in one place
 apply_sanitizers(playgroundlib)
