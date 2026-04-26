@@ -1,6 +1,5 @@
-#ifndef INCLUDED_MEDIAN_AGGREGATOR
-#define INCLUDED_MEDIAN_AGGREGATOR
-
+#ifndef INCLUDED_MEDIAN_AGGREGATOR_MPSC
+#define INCLUDED_MEDIAN_AGGREGATOR_MPSC
 /*
 Design and implement a C++ class that consumes timestamped records form multiple ordered streams
 and emits the median value for each timestamp once that timestamp is known to be complete.
@@ -20,46 +19,73 @@ Assumptions:
 - Median for an even number of values is defined as the average of the two middle values.
 */
 
+#include <condition_variable>
 #include <cstddef>
-#include <cstdint>
-#include <map>
-#include <mutex>
-#include <vector>
-namespace prep {
+#include <deque>
+#include <medianAggregator.h>
+#include <variant>
 
-struct Record {
-    std::int64_t timestamp;
-    double value;
+namespace prep {
+struct PushEvent {
+    std::size_t stream_id;
+    Record record;
 };
 
-enum class MedianAggregatorError : int { SUCCESS = 0, LOW_TIMESTAMP = 1 };
+struct CloseEvent {
+    std::size_t stream_id;
+};
 
-class MedianAggregator {
+struct AdvanceEvent {
+    std::size_t stream_id;
+    int64_t watermark;
+};
+
+class MedianAggregatorMPSC {
     // Aliases
-    using Timestamp = std::int64_t;
-    using Value = double;
+    using Event = std::variant<PushEvent, CloseEvent, AdvanceEvent>;
     using StreamId = std::size_t;
+    using Timestamp = int64_t;
+    using Value = double;
     using StreamBucket = std::vector<Value>;
 
     // Data Members
     std::map<Timestamp, StreamBucket> d_pending_by_timestamp;
-    std::vector<Timestamp> d_latest_stream_timestamp;
+    std::vector<Timestamp> d_latest_stream_timestamps;
     std::vector<Value> d_emitted_records;
-    std::mutex d_mutex;
+    std::deque<Event> d_queue;
+    std::mutex d_queue_mutex;
+    std::condition_variable d_queue_cv;
+    std::thread d_consumer;
+    bool d_stopping;
 
-  private:
+    // Private Manipulators
     double _compute_median_value(std::vector<Value> &values) noexcept;
     void _collect_completed_timestamps(std::vector<StreamBucket> &stream_buckets,
                                        Timestamp completed_bound) noexcept;
     void _emit_completed_timestamps(std::vector<StreamBucket> &stream_buckets) noexcept;
+    void _handle_event(const PushEvent &event);
+    void _handle_event(const CloseEvent &event);
+    void _handle_event(const AdvanceEvent &event);
+
+    // thread runner
+    void _run();
+    void _shutdown();
 
   public:
-    MedianAggregator(std::size_t stream_size);
+    // Constructor
+    MedianAggregatorMPSC(std::size_t stream_size);
+
+    MedianAggregatorMPSC(const MedianAggregatorMPSC& medianAggreator) = delete;
+    MedianAggregatorMPSC& operator=(const MedianAggregatorMPSC& medianAggreator) = delete;
+
+    // Destructor
+    ~MedianAggregatorMPSC();
 
   public:
-    MedianAggregatorError push(StreamId stream_id, Record record);
+    // Public Manipulators
+    void push(StreamId stream_id, Record record);
     void close(StreamId stream_id);
-    void advance_watermark(StreamId stream_id, Timestamp watermark) noexcept;
+    void advance_watermark(StreamId stream_id, Timestamp watermark);
     const std::vector<Value> &emit() const noexcept;
 };
 
