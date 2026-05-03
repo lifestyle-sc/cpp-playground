@@ -9,8 +9,7 @@
 namespace prep {
 MedianAggregatorMPSC::MedianAggregatorMPSC(std::size_t stream_size)
     : d_latest_stream_timestamps(stream_size, std::numeric_limits<Timestamp>::min()),
-      d_consumer(&MedianAggregatorMPSC::_run, this) 
-    , d_stopping(false){
+      d_consumer(&MedianAggregatorMPSC::_run, this), d_stopping(false) {
     d_emitted_records.reserve(1 << 10);
 }
 

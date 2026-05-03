@@ -75,8 +75,8 @@ class MedianAggregatorMPSC {
     // Constructor
     MedianAggregatorMPSC(std::size_t stream_size);
 
-    MedianAggregatorMPSC(const MedianAggregatorMPSC& medianAggreator) = delete;
-    MedianAggregatorMPSC& operator=(const MedianAggregatorMPSC& medianAggreator) = delete;
+    MedianAggregatorMPSC(const MedianAggregatorMPSC &medianAggreator) = delete;
+    MedianAggregatorMPSC &operator=(const MedianAggregatorMPSC &medianAggreator) = delete;
 
     // Destructor
     ~MedianAggregatorMPSC();
