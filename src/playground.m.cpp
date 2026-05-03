@@ -38,6 +38,8 @@ bool compareS2(const char *s1, const char *s2) {
 }
 
 int main(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
     std::cout << "Welcome to my setup" << std::endl;
 
     // perfutil::computeSortPerformance(1 << 18, 1 << 14);

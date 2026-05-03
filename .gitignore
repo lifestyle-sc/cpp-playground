@@ -6,6 +6,7 @@ build/
 
 # clangd
 .cache/
+compile_commands.json
 
 # etc files
 data
